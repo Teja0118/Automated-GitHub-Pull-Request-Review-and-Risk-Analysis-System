@@ -3,6 +3,7 @@ import joblib
 import os
 import pandas as pd
 from dotenv import load_dotenv
+from typing import List
 
 from app.ingestion.github_client import GithubClient
 from app.api.pr_feature_extractor import LivePRFeatureExtractor
@@ -57,6 +58,19 @@ def get_latest_pr_number() -> int:
         raise ValueError("No Pull Requests found!")
 
     return prs[0]["number"]
+
+def get_latest_pr_numbers(limit: int = 10) -> List[int]:
+    prs = github_client.get(
+        f"/repos/{REPO_OWNER}/{REPO_NAME}/pulls",
+        params={
+            "state": "open",
+            "sort": "created",
+            "direction": "desc",
+            "per_page": limit,
+        },
+    )
+
+    return [pr["number"] for pr in prs]
 
 
 # STARTUP 
@@ -125,4 +139,42 @@ def predict_pr_risk(pr_number: int):
         "llm_review_suggestions": llm_suggestions,
         "features_used": features,
         "ast_metrics": ast_metrics,
+    }
+
+@app.get("/rank/prs")
+def rank_latest_prs(limit: int = 5):
+    pr_numbers = get_latest_pr_numbers(limit)
+
+    ranked_results = []
+
+    for pr_number in pr_numbers:
+        features = feature_extractor.extract_features(pr_number)
+        df = pd.DataFrame([features])
+
+        prediction = model.predict(df)[0]
+        probs = model.predict_proba(df)[0]
+
+        risk_probs = {
+            cls: float(prob)
+            for cls, prob in zip(model.classes_, probs)
+        }
+
+        ranked_results.append({
+            "pr_number": pr_number,
+            "predicted_risk": prediction,
+            "risk_probability": risk_probs[prediction],
+            "risk_probabilities": risk_probs,
+        })
+
+    # Risk priority order
+    risk_priority = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+    ranked_results.sort(
+        key=lambda x: (risk_priority[x["predicted_risk"]], x["risk_probability"]),
+        reverse=True,
+    )
+
+    return {
+        "count": len(ranked_results),
+        "ranked_pull_requests": ranked_results,
     }
