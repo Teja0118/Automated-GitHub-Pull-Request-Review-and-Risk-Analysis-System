@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PR Risk Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        button {
+            padding: 8px 14px;
+            margin: 6px 0;
+            cursor: pointer;
+        }
+        input {
+            padding: 6px;
+            margin-right: 6px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 12px;
+            white-space: pre-wrap;
+        }
+        h2 {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>Automated GitHub Pull Request Review & Risk Analysis</h1>
+<p>
+ML-driven PR risk prediction with AST analysis and LLM-based review suggestions
+</p>
+
+<hr>
+
+<h2>Predict Pull Request Risk</h2>
+
+<button onclick="analyzeLatest()">Analyze Latest PR</button>
+
+<br><br>
+
+<input type="number" id="prNumber" placeholder="Enter PR number">
+<button onclick="analyzePR()">Analyze PR</button>
+
+<hr>
+
+<h2>Rank Latest Pull Requests</h2>
+
+<button onclick="rankPRs()">Rank Latest PRs</button>
+
+<hr>
+
+<h2>Result</h2>
+<pre id="output">Waiting for input...</pre>
+
+<script>
+async function analyzeLatest() {
+    const res = await fetch("/predict/pr/latest");
+    const data = await res.json();
+    show(data);
+}
+
+async function analyzePR() {
+    const pr = document.getElementById("prNumber").value;
+    if (!pr) {
+        alert("Please enter a PR number");
+        return;
+    }
+    const res = await fetch(`/predict/pr/${pr}`);
+    const data = await res.json();
+    show(data);
+}
+
+async function rankPRs() {
+    const res = await fetch("/rank/prs");
+    const data = await res.json();
+    show(data);
+}
+
+function show(data) {
+    document.getElementById("output").textContent =
+        JSON.stringify(data, null, 2);
+}
+</script>
+
+</body>
+</html>

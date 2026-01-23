@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 import joblib
 import os
 import pandas as pd
@@ -37,6 +41,10 @@ app = FastAPI(
     description="Predicts pull request risk and generates explainable review suggestions",
     version="1.0.0",
 )
+
+# Static & Templates
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
 
 model = None
 
@@ -88,12 +96,13 @@ def load_model():
 
 # ENDPOINTS 
 
-@app.get("/")
-def health_check():
-    return {
-        "status": "OK",
-        "message": "PR Risk Analysis API is running",
-    }
+# UI Route
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request}
+    )
 
 
 @app.get("/predict/pr/latest")
