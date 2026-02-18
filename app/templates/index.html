@@ -2,66 +2,107 @@
 <html>
 <head>
     <title>PR Risk Analysis</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-        }
-        button {
-            padding: 8px 14px;
-            margin: 6px 0;
-            cursor: pointer;
-        }
-        input {
-            padding: 6px;
-            margin-right: 6px;
-        }
-        pre {
-            background: #f4f4f4;
-            padding: 12px;
-            white-space: pre-wrap;
-        }
-        h2 {
-            margin-top: 30px;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 
 <body>
 
-<h1>Automated GitHub Pull Request Review & Risk Analysis</h1>
-<p>
-ML-driven PR risk prediction with AST analysis and LLM-based review suggestions
-</p>
+<div class="container">
 
-<hr>
+    <h1>Automated GitHub Pull Request Review & Risk Analysis</h1>
+    <p class="subtitle">
+        ML-driven PR risk prediction with AST analysis and LLM-based review suggestions
+    </p>
 
-<h2>Predict Pull Request Risk</h2>
+    <section class="card">
+        <h2>Predict Pull Request Risk</h2>
 
-<button onclick="analyzeLatest()">Analyze Latest PR</button>
+        <div class="actions">
+            <button onclick="analyzeLatest()">Analyze Latest PR</button>
+        </div>
 
-<br><br>
+        <div class="actions">
+            <input
+                type="text"
+                id="prNumber"
+                placeholder="Enter PR number"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                oninput="allowOnlyNumbers(this)"
+            />
 
-<input type="number" id="prNumber" placeholder="Enter PR number">
-<button onclick="analyzePR()">Analyze PR</button>
+            <button onclick="analyzePR()">Analyze PR</button>
+        </div>
+    </section>
 
-<hr>
+    <section class="card">
+        <h2>Rank Latest Pull Requests</h2>
 
-<h2>Rank Latest Pull Requests</h2>
+        <div class="actions">
+            <input
+                type="text"
+                id="rankLimit"
+                placeholder="Limit (default 5)"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                oninput="allowOnlyNumbers(this)"
+            />
 
-<button onclick="rankPRs()">Rank Latest PRs</button>
+            <button onclick="rankPRs()">Rank Latest PRs</button>
+        </div>
+    </section>
 
-<hr>
 
-<h2>Result</h2>
-<pre id="output">Waiting for input...</pre>
+    <section class="card">
+        <h2>Result</h2>
+        <div id="output" class="result-container">
+            Waiting for input...
+        </div>
+    </section>
+
+</div>
 
 <script>
-async function analyzeLatest() {
-    const res = await fetch("/predict/pr/latest");
-    const data = await res.json();
-    show(data);
+
+function allowOnlyNumbers(input) {
+    input.value = input.value.replace(/[^0-9]/g, "");
 }
+
+
+function disableAllButtons() {
+    document.querySelectorAll("button").forEach(btn => {
+        btn.disabled = true;
+    });
+}
+
+function enableAllButtons() {
+    document.querySelectorAll("button").forEach(btn => {
+        btn.disabled = false;
+    });
+}
+
+async function analyzeLatest() {
+    showLoading();
+
+    try {
+        const res = await fetch("/predict/pr/latest");
+        const data = await res.json();
+
+        if (!res.ok) {
+            document.getElementById("output").innerHTML =
+                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
+            return;
+        }
+
+        show(data);
+    } catch (err) {
+        document.getElementById("output").innerHTML =
+            "<p style='color:red;'>Network error occurred.</p>";
+    } finally {
+        enableAllButtons();
+    }
+}
+
 
 async function analyzePR() {
     const pr = document.getElementById("prNumber").value;
@@ -69,21 +110,189 @@ async function analyzePR() {
         alert("Please enter a PR number");
         return;
     }
-    const res = await fetch(`/predict/pr/${pr}`);
-    const data = await res.json();
-    show(data);
+
+    showLoading();
+
+    try {
+        const res = await fetch(`/predict/pr/${pr}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+            document.getElementById("output").innerHTML =
+                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
+            return;
+        }
+
+        show(data);
+    } catch (err) {
+        document.getElementById("output").innerHTML =
+            "<p style='color:red;'>Network error occurred.</p>";
+    } finally {
+        enableAllButtons();
+    }
 }
+
 
 async function rankPRs() {
-    const res = await fetch("/rank/prs");
-    const data = await res.json();
-    show(data);
+    showLoading();
+
+    const limitInput = document.getElementById("rankLimit").value;
+    const url = limitInput
+        ? `/rank/prs?limit=${limitInput}`
+        : `/rank/prs`;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!res.ok) {
+            document.getElementById("output").innerHTML =
+                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
+            return;
+        }
+
+        show(data);
+    } catch (err) {
+        document.getElementById("output").innerHTML =
+            "<p style='color:red;'>Network error occurred.</p>";
+    } finally {
+        enableAllButtons();
+    }
 }
 
+
 function show(data) {
-    document.getElementById("output").textContent =
-        JSON.stringify(data, null, 2);
+    if (data.detail) {
+        document.getElementById("output").innerHTML =
+            `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
+        return;
+    }
+
+    // Ranking response
+    if (data.ranked_pull_requests) {
+        renderRanking(data);
+        return;
+    }
+
+    // Single PR response
+    if (data.pr_number) {
+        renderSinglePR(data);
+        return;
+    }
+
+    document.getElementById("output").innerHTML =
+        "<p>Unsupported response format</p>";
 }
+
+function renderSinglePR(data) {
+    const riskClass =
+        data.predicted_risk === "HIGH" ? "risk-high" :
+        data.predicted_risk === "MEDIUM" ? "risk-medium" :
+        "risk-low";
+
+    let html = `
+        <h2>
+            PR #${data.pr_number}
+            <span class="risk-badge ${riskClass}">
+                ${data.predicted_risk} RISK
+            </span>
+        </h2>
+
+        <div class="section">
+            <h3>Risk Probabilities</h3>
+            ${Object.entries(data.risk_probabilities).map(
+                ([k, v]) => `<span class="tag">${k}: ${(v * 100).toFixed(1)}%</span>`
+            ).join("")}
+        </div>
+
+        <div class="section">
+            <h3>Explanation</h3>
+            <p><strong>Summary:</strong> ${data.explanation.summary}</p>
+            <p><strong>Code Insight:</strong> ${data.explanation.code_complexity_insight}</p>
+        </div>
+
+        <div class="section">
+            <h3>LLM Review Suggestions</h3>
+            <pre class="llm-box">${data.llm_review_suggestions}</pre>
+        </div>
+
+        <div class="section">
+            <h3>Features Used</h3>
+            ${renderTable(data.features_used)}
+        </div>
+
+        <div class="section">
+            <h3>AST Metrics</h3>
+            ${renderTable(data.ast_metrics)}
+        </div>
+    `;
+
+    document.getElementById("output").innerHTML = html;
+}
+
+function renderRanking(data) {
+    let rows = data.ranked_pull_requests.map((pr, index) => {
+        const riskClass =
+            pr.predicted_risk === "HIGH" ? "risk-high" :
+            pr.predicted_risk === "MEDIUM" ? "risk-medium" :
+            "risk-low";
+
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>#${pr.pr_number}</td>
+                <td>
+                    <span class="risk-badge ${riskClass}">
+                        ${pr.predicted_risk}
+                    </span>
+                </td>
+                <td>${(pr.risk_probability * 100).toFixed(1)}%</td>
+            </tr>
+        `;
+    }).join("");
+
+    document.getElementById("output").innerHTML = `
+        <h2>Ranked Pull Requests</h2>
+        <p>Total analyzed: ${data.count}</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>PR Number</th>
+                    <th>Risk Level</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+    `;
+}
+
+
+function renderTable(obj) {
+    return `
+        <table>
+            <tbody>
+                ${Object.entries(obj).map(
+                    ([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`
+                ).join("")}
+            </tbody>
+        </table>
+    `;
+}
+
+
+
+function showLoading() {
+    disableAllButtons();
+    document.getElementById("output").innerHTML =
+        "<p>Processing request…</p>";
+}
+
+
 </script>
 
 </body>
