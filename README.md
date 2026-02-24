@@ -1,78 +1,64 @@
-* Automated GitHub Pull Request Review and Risk Analysis System 
-* Overview:
+# Automated GitHub Pull Request Review and Risk Analysis System
 
-The Automated GitHub Pull Request Review and Risk Analysis System is an AI-driven platform that analyzes historical pull request data to predict risk levels, prioritize reviews, and generate explainable, intelligent review suggestions.
+## Overview
+
+The Automated GitHub Pull Request Review and Risk Analysis System is an AI-driven platform that analyzes pull request data to predict risk levels, prioritize reviews, and generate explainable, intelligent review suggestions.
 
 Unlike traditional rule-based tools, this system uses machine learning, AST-based code analysis, and LLMs to provide data-driven insights that help reviewers focus on high-risk pull requests and improve overall software quality.
 
-* Problem Statement:
+## Problem Statement
 
 Traditional code review tools rely on static rules and lack data-driven prioritization of pull requests. As repositories scale, reviewers struggle to identify which pull requests need urgent attention.
 
-* This project addresses that gap by:
+This project addresses that gap by:
+- Learning from pull request behavior
+- Predicting risk probabilistically
+- Explaining why a PR is risky
+- Generating AI-assisted review suggestions
 
-Learning from historical pull request behavior
+## Solution Highlights
 
-Predicting risk probabilistically
+- ML-based PR risk prediction (`LOW` / `MEDIUM` / `HIGH`)
+- AST parsing for code complexity analysis
+- Explainable risk factors and reviewer focus areas
+- LLM-generated review suggestions
+- REST APIs + Web UI for real-time usage
+- Dynamic multi-repo support (user selects any repository)
 
-Explaining why a PR is risky
+---
 
-Generating AI-assisted review suggestions
+## System Architecture
 
-* Solution Highlights:
+GitHub API  
+-> Data Ingestion (PRs, Diffs, Reviews)  
+-> PostgreSQL (Structured Storage)  
+-> Feature Engineering + AST Parsing  
+-> ML Model (Random Forest)  
+-> Explainability Engine  
+-> LLM Review Generator (Groq API)  
+-> FastAPI Backend + Web UI
 
-ML-based PR risk prediction (LOW / MEDIUM / HIGH)
+---
 
-AST parsing for code complexity analysis
+## Technologies Used
 
-Explainable risk factors and reviewer focus areas
+- Language: Python
+- Backend: FastAPI
+- Database: PostgreSQL
+- ORM: SQLAlchemy
+- ML: Scikit-learn (Random Forest)
+- Feature Engineering: Code diffs, review metadata, temporal and author signals
+- AST Analysis: Python `ast` module
+- LLM: Groq API (LLaMA-based models)
+- UI: FastAPI templates (HTML/CSS)
+- Version Control: Git, GitHub
 
-LLM-generated review suggestions
+---
 
-REST APIs + Web UI for real-time usage
+## Project Structure
 
-
-* System Architecture:
-
-GitHub API
-   │
-   ▼
-Data Ingestion (PRs, Diffs, Reviews)
-   │
-   ▼
-PostgreSQL (Structured Storage)
-   │
-   ▼
-Feature Engineering + AST Parsing
-   │
-   ▼
-ML Model (Random Forest)
-   │
-   ▼
-Explainability Engine
-   │
-   ▼
-LLM Review Generator (Groq API)
-   │
-   ▼
-FastAPI Backend + Web UI
-
-* Technologies Used:
-Category-	Technologies
-Language-	Python
-Backend-	FastAPI
-Database-	PostgreSQL
-ML- Scikit-learn (Random Forest)
-Feature Engineering-	Code diffs, AST parsing
-AST Analysis-	Python ast module
-LLM-	Groq API (LLaMA-based models)
-UI-	FastAPI Templates (HTML/CSS)
-ORM-	SQLAlchemy
-Version Control-	Git, GitHub
-
-* Project Structure:
+```text
 app/
-│
 ├── api/                 # FastAPI routes & server
 ├── ingestion/           # GitHub data ingestion
 ├── features/            # Feature builders & AST complexity
@@ -82,135 +68,159 @@ app/
 ├── db/                  # Database models & session
 ├── templates/           # UI templates
 ├── static/              # CSS / assets
-│
-├── main.py              # Data ingestion + feature pipeline
-└── requirements.txt
+└── main.py              # Data ingestion + feature + labeling pipeline
 
-* Features Extracted:
+models/
+└── {owner}__{repo}.pkl  # Repo-specific trained model files
+```
 
-* Code Change Features:
+---
 
-Total files changed
+## Features Used for ML
 
-Lines added / deleted
+- Code change features:
+  - `total_files_changed`
+  - `total_additions`
+  - `total_deletions`
+  - `code_churn`
+  - `python_files_changed`
 
-Code churn
+- Review behavior features:
+  - `review_count`
+  - `change_request_count`
+  - `commented_count`
+  - `has_reviews`
 
+- Temporal features:
+  - `time_to_merge_hours`
 
-Python file ratio
+- Author activity features:
+  - `author_pr_count`
+  - `author_recent_prs`
 
+---
 
-* AST-Based Complexity Features:
-
-Number of functions
-
-Number of classes
-
-Branch count
-
-Maximum nesting depth
-
-Complexity flag (LOW / MEDIUM / HIGH)
-
-Review Behavior Features:
-
-Review count
-
-Change requests
-
-Comments
-
-Approval count
-
-* Developer History:
-
-Total PRs by author
-
-Recent PR activity
-
-* Machine Learning:
-
-Model: Random Forest Classifier
-
-Labels: LOW, MEDIUM, HIGH
-
-Training Data: Historical PR features
-
-Evaluation: Accuracy, Precision, Recall, Confusion Matrix
-
-Achieved Accuracy: ~95–98%
-
-* Explainability:
+## Explainability Output
 
 Each prediction includes:
+- Risk summary
+- Probabilities for each class
+- AST-based complexity insight
+- Reviewer focus guidance
+- LLM-generated review suggestions
 
-Risk summary
+---
 
-Key contributing factors
+## API Endpoints
 
-AST-based complexity insights
+### UI
+- `GET /`
+  - Opens the web interface.
 
-Reviewer focus areas
+### Repository Sync and Training
+- `POST /repos/sync`
+  - Request body:
+    ```json
+    {
+      "owner": "tiangolo",
+      "repo": "fastapi"
+    }
+    ```
+  - Action: Ingests PR metadata, diff stats, reviews, builds features, and generates risk labels for selected repository.
 
-* LLM-Based Review Suggestions:
+- `POST /repos/train`
+  - Request body:
+    ```json
+    {
+      "owner": "tiangolo",
+      "repo": "fastapi"
+    }
+    ```
+  - Action: Trains Random Forest model from stored DB features for selected repository.
 
-Uses Groq API (free, cloud-based)
+### Prediction
+- `GET /predict/{owner}/{repo}/pr/latest`
+  - Predicts risk for latest PR in selected repository.
 
-No local model installation
+- `GET /predict/{owner}/{repo}/pr/{pr_number}`
+  - Predicts risk for a specific PR number.
 
-* Generates:
+### Ranking
+- `GET /rank/{owner}/{repo}/prs?limit=5`
+  - Ranks latest open PRs by predicted risk.
+  - `limit` must be between `1` and `10`.
 
-Maintainability suggestions
+---
 
-Risk mitigation steps
+## Environment Variables
 
-Review recommendations
+Create a `.env` file:
 
-* API Endpoints:
-Endpoint	    	    Description
-/home	                Home page
-/predict/pr/latest	    Predict risk for latest PR
-/predict/pr/{pr_number}	Predict risk for specific PR
-/rank/prs	Rank recent PRs by risk
-
-* Web Interface:
-
-Single-command run
-
-* Displays:
-
-Latest PR risk
-
-PR-wise prediction
-
-Ranked PR list
-
-* Explanations & LLM suggestions
-
-* How to Run:
-1. Install dependencies:
-pip install -r requirements.txt
-
-2. Set environment variables (.env):
-GROQ_API_KEY=your_groq_api_key
+```env
+# GitHub access token
 GITHUB_TOKEN=your_github_token
-REPO_OWNER=tiangolo
-REPO_NAME=fastapi
+# alternatively:
+# GITHUB_API_TOKEN=your_github_token
 
-3. Run backend: 
+# Groq API key
+GROQ_API_KEY=your_groq_api_key
+
+# Database config
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=your_db_name
+```
+
+---
+
+## Installation and Run
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+2. Start backend:
+```bash
 uvicorn app.api.server:app --reload
+```
 
-4. Open browser:
-http://127.0.0.1:8000
+3. Open browser:
+- `http://127.0.0.1:8000`
 
-* Expected Outcome:
+---
 
-Accurate PR risk prediction
+## Recommended Usage Flow (UI)
 
-Prioritized review workflow
+1. Enter repository owner and repo.
+2. Click **Sync Repo Data**.
+3. Click **Train Repo Model**.
+4. Use:
+   - **Analyze Latest PR**
+   - **Analyze PR**
+   - **Rank Latest PRs**
 
-Explainable AI insights
+---
 
-Improved review efficiency
+## Notes
 
-Reduced likelihood of risky merges
+- Model files are stored per repo:
+  - `models/{owner}__{repo}.pkl`
+- You must run sync and train before prediction for a new repository.
+- Predictions combine:
+  - ML score
+  - AST analysis
+  - LLM review suggestions
+
+---
+
+## Expected Outcome
+
+- Accurate PR risk prediction
+- Prioritized review workflow
+- Explainable AI insights for reviewers
+- Improved code review efficiency
+- Reduced likelihood of risky merges
+```

@@ -1,32 +1,34 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
-from db.models import PRFeature
+from app.db.models import PRFeature
 
 
 class RiskLabeler:
     def __init__(self, db: Session):
         self.db = db
 
-    def generate_labels(self) -> None:
-        features = self.db.query(PRFeature).all()
+    def generate_labels(self, repo_id: int) -> int:
+        features = (
+            self.db.query(PRFeature)
+            .filter(PRFeature.repo_id == repo_id)
+            .all()
+        )
 
-        # compute raw risk scores first 
+        if not features:
+            print(f"No features found for repo_id={repo_id}.")
+            return 0
+
         scores = []
 
-        max_churn = max(f.code_churn for f in features if f.code_churn is not None)
+        max_churn = max((f.code_churn or 0) for f in features)
         max_merge_time = max((f.time_to_merge_hours or 0) for f in features)
 
         for f in features:
-            churn_score = (f.code_churn / max_churn) if max_churn else 0
-            merge_score = (
-                (f.time_to_merge_hours / max_merge_time)
-                if f.time_to_merge_hours and max_merge_time
-                else 0
-            )
+            churn_score = ((f.code_churn or 0) / max_churn) if max_churn else 0
+            merge_score = ((f.time_to_merge_hours or 0) / max_merge_time) if max_merge_time else 0
 
             change_request_ratio = (
-                f.change_request_count / f.review_count
+                (f.change_request_count / f.review_count)
                 if f.review_count and f.review_count > 0
                 else 0
             )
@@ -43,12 +45,10 @@ class RiskLabeler:
             f.risk_score = risk_score
             scores.append(risk_score)
 
-        # percentile thresholds
         scores_sorted = sorted(scores)
         low_cutoff = scores_sorted[int(0.60 * len(scores_sorted))]
         high_cutoff = scores_sorted[int(0.85 * len(scores_sorted))]
 
-        # assign labels 
         for f in features:
             if f.risk_score <= low_cutoff:
                 f.risk_label = "LOW"
@@ -61,5 +61,5 @@ class RiskLabeler:
             self.db.add(f)
 
         self.db.commit()
-        print("Risk labels generated using percentile-based thresholds")
-
+        print(f"Risk labels generated for repo_id={repo_id}")
+        return len(features)

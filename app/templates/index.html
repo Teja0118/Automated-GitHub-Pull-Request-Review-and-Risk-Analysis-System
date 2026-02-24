@@ -4,107 +4,134 @@
     <title>PR Risk Analysis</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
-
 <body>
-
 <div class="container">
-
     <h1>Automated GitHub Pull Request Review & Risk Analysis</h1>
-    <p class="subtitle">
-        ML-driven PR risk prediction with AST analysis and LLM-based review suggestions
-    </p>
+    <p class="subtitle">ML-driven PR risk prediction with AST analysis and LLM-based review suggestions</p>
+
+    <section class="card">
+        <h2>Repository</h2>
+        <div class="actions">
+            <input type="text" id="owner" placeholder="Owner (e.g. tiangolo)" value="tiangolo" />
+            <input type="text" id="repo" placeholder="Repo (e.g. fastapi)" value="fastapi" />
+        </div>
+        <div class="actions">
+            <button onclick="syncRepo()">Sync Repo Data</button>
+            <button onclick="trainRepo()">Train Repo Model</button>
+        </div>
+    </section>
 
     <section class="card">
         <h2>Predict Pull Request Risk</h2>
-
         <div class="actions">
             <button onclick="analyzeLatest()">Analyze Latest PR</button>
         </div>
-
         <div class="actions">
-            <input
-                type="text"
-                id="prNumber"
-                placeholder="Enter PR number"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                oninput="allowOnlyNumbers(this)"
-            />
-
+            <input type="text" id="prNumber" placeholder="Enter PR number" inputmode="numeric" pattern="[0-9]*" oninput="allowOnlyNumbers(this)" />
             <button onclick="analyzePR()">Analyze PR</button>
         </div>
     </section>
 
     <section class="card">
         <h2>Rank Latest Pull Requests</h2>
-
         <div class="actions">
-            <input
-                type="text"
-                id="rankLimit"
-                placeholder="Limit (default 5)"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                oninput="allowOnlyNumbers(this)"
-            />
-
+            <input type="text" id="rankLimit" placeholder="Limit (default 5)" inputmode="numeric" pattern="[0-9]*" oninput="allowOnlyNumbers(this)" />
             <button onclick="rankPRs()">Rank Latest PRs</button>
         </div>
     </section>
 
-
     <section class="card">
         <h2>Result</h2>
-        <div id="output" class="result-container">
-            Waiting for input...
-        </div>
+        <div id="output" class="result-container">Waiting for input...</div>
     </section>
-
 </div>
 
 <script>
-
 function allowOnlyNumbers(input) {
     input.value = input.value.replace(/[^0-9]/g, "");
 }
 
+function getRepoInputs() {
+    const owner = document.getElementById("owner").value.trim();
+    const repo = document.getElementById("repo").value.trim();
+    if (!owner || !repo) {
+        alert("Please enter both owner and repo");
+        return null;
+    }
+    return { owner, repo };
+}
 
 function disableAllButtons() {
-    document.querySelectorAll("button").forEach(btn => {
-        btn.disabled = true;
-    });
+    document.querySelectorAll("button").forEach(btn => btn.disabled = true);
 }
-
 function enableAllButtons() {
-    document.querySelectorAll("button").forEach(btn => {
-        btn.disabled = false;
-    });
+    document.querySelectorAll("button").forEach(btn => btn.disabled = false);
+}
+function showLoading() {
+    disableAllButtons();
+    document.getElementById("output").innerHTML = "<p>Processing request...</p>";
 }
 
-async function analyzeLatest() {
+async function syncRepo() {
+    const repoCtx = getRepoInputs();
+    if (!repoCtx) return;
     showLoading();
 
     try {
-        const res = await fetch("/predict/pr/latest");
+        const res = await fetch("/repos/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(repoCtx)
+        });
         const data = await res.json();
-
-        if (!res.ok) {
-            document.getElementById("output").innerHTML =
-                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
-            return;
-        }
-
         show(data);
-    } catch (err) {
-        document.getElementById("output").innerHTML =
-            "<p style='color:red;'>Network error occurred.</p>";
+    } catch {
+        document.getElementById("output").innerHTML = "<p style='color:red;'>Network error occurred.</p>";
     } finally {
         enableAllButtons();
     }
 }
 
+async function trainRepo() {
+    const repoCtx = getRepoInputs();
+    if (!repoCtx) return;
+    showLoading();
+
+    try {
+        const res = await fetch("/repos/train", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(repoCtx)
+        });
+        const data = await res.json();
+        show(data);
+    } catch {
+        document.getElementById("output").innerHTML = "<p style='color:red;'>Network error occurred.</p>";
+    } finally {
+        enableAllButtons();
+    }
+}
+
+async function analyzeLatest() {
+    const repoCtx = getRepoInputs();
+    if (!repoCtx) return;
+    showLoading();
+
+    try {
+        const res = await fetch(`/predict/${repoCtx.owner}/${repoCtx.repo}/pr/latest`);
+        const data = await res.json();
+        show(data);
+    } catch {
+        document.getElementById("output").innerHTML = "<p style='color:red;'>Network error occurred.</p>";
+    } finally {
+        enableAllButtons();
+    }
+}
 
 async function analyzePR() {
+    const repoCtx = getRepoInputs();
+    if (!repoCtx) return;
+
     const pr = document.getElementById("prNumber").value;
     if (!pr) {
         alert("Please enter a PR number");
@@ -114,52 +141,36 @@ async function analyzePR() {
     showLoading();
 
     try {
-        const res = await fetch(`/predict/pr/${pr}`);
+        const res = await fetch(`/predict/${repoCtx.owner}/${repoCtx.repo}/pr/${pr}`);
         const data = await res.json();
-
-        if (!res.ok) {
-            document.getElementById("output").innerHTML =
-                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
-            return;
-        }
-
         show(data);
-    } catch (err) {
-        document.getElementById("output").innerHTML =
-            "<p style='color:red;'>Network error occurred.</p>";
+    } catch {
+        document.getElementById("output").innerHTML = "<p style='color:red;'>Network error occurred.</p>";
     } finally {
         enableAllButtons();
     }
 }
 
-
 async function rankPRs() {
-    showLoading();
+    const repoCtx = getRepoInputs();
+    if (!repoCtx) return;
 
+    showLoading();
     const limitInput = document.getElementById("rankLimit").value;
     const url = limitInput
-        ? `/rank/prs?limit=${limitInput}`
-        : `/rank/prs`;
+        ? `/rank/${repoCtx.owner}/${repoCtx.repo}/prs?limit=${limitInput}`
+        : `/rank/${repoCtx.owner}/${repoCtx.repo}/prs`;
 
     try {
         const res = await fetch(url);
         const data = await res.json();
-
-        if (!res.ok) {
-            document.getElementById("output").innerHTML =
-                `<p style="color:red;"><strong>Error:</strong> ${data.detail}</p>`;
-            return;
-        }
-
         show(data);
-    } catch (err) {
-        document.getElementById("output").innerHTML =
-            "<p style='color:red;'>Network error occurred.</p>";
+    } catch {
+        document.getElementById("output").innerHTML = "<p style='color:red;'>Network error occurred.</p>";
     } finally {
         enableAllButtons();
     }
 }
-
 
 function show(data) {
     if (data.detail) {
@@ -168,20 +179,181 @@ function show(data) {
         return;
     }
 
-    // Ranking response
+    if (data.message && data.synced_prs !== undefined) {
+        renderSyncResult(data);
+        return;
+    }
+
+    if (data.message && data.classification_report) {
+        renderTrainResult(data);
+        return;
+    }
+
     if (data.ranked_pull_requests) {
         renderRanking(data);
         return;
     }
 
-    // Single PR response
     if (data.pr_number) {
         renderSinglePR(data);
         return;
     }
 
+    renderGeneric(data);
+}
+
+function renderGeneric(data) {
     document.getElementById("output").innerHTML =
-        "<p>Unsupported response format</p>";
+        `<pre class="llm-box">${JSON.stringify(data, null, 2)}</pre>`;
+}
+
+function renderSyncResult(data) {
+    const rows = [
+        ["Message", data.message],
+        ["Repository", data.repo],
+        ["Repo ID", data.repo_id],
+        ["Synced PRs", data.synced_prs],
+        ["Labeled Rows", data.labeled_rows]
+    ];
+
+    document.getElementById("output").innerHTML = `
+        <h2>Sync Result</h2>
+        ${renderRowsTable(rows)}
+    `;
+}
+
+function renderTrainResult(data) {
+    const summaryRows = [
+        ["Message", data.message],
+        ["Repository", data.repo],
+        ["Repo ID", data.repo_id],
+        ["Model Path", data.model_path],
+        ["Train Rows", data.train_rows],
+        ["Test Rows", data.test_rows],
+        ["Classes", (data.classes || []).join(", ")]
+    ];
+
+    const accuracy = (data.classification_report?.accuracy ?? 0) * 100;
+
+    const classOrder = ["HIGH", "MEDIUM", "LOW"];
+    const classRows = classOrder
+        .filter(k => data.classification_report?.[k])
+        .map(k => {
+            const m = data.classification_report[k];
+            return `
+                <tr>
+                    <td>${k}</td>
+                    <td>${(m.precision * 100).toFixed(2)}%</td>
+                    <td>${(m.recall * 100).toFixed(2)}%</td>
+                    <td>${(m["f1-score"] * 100).toFixed(2)}%</td>
+                    <td>${m.support}</td>
+                </tr>
+            `;
+        })
+        .join("");
+
+    const fiRows = Object.entries(data.feature_importance || {})
+        .map(([k, v]) => `
+            <tr>
+                <td>${k}</td>
+                <td>${(v * 100).toFixed(2)}%</td>
+            </tr>
+        `)
+        .join("");
+
+    document.getElementById("output").innerHTML = `
+        <h2>Training Result</h2>
+        ${renderRowsTable(summaryRows)}
+
+        <div class="section">
+            <h3>Accuracy</h3>
+            <p><strong>${accuracy.toFixed(2)}%</strong></p>
+        </div>
+
+        <div class="section">
+            <h3>Class-wise Metrics</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1-Score</th>
+                        <th>Support</th>
+                    </tr>
+                </thead>
+                <tbody>${classRows}</tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h3>Confusion Matrix</h3>
+            ${renderConfusionMatrixHeatmap(data.confusion_matrix, data.classes || [])}
+        </div>
+
+        <div class="section">
+            <h3>Feature Importance</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Importance</th>
+                    </tr>
+                </thead>
+                <tbody>${fiRows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderConfusionMatrixHeatmap(matrix, classes) {
+    if (!Array.isArray(matrix) || matrix.length === 0) {
+        return "<p>No confusion matrix available.</p>";
+    }
+
+    const labels = classes.length ? classes : matrix.map((_, i) => `C${i + 1}`);
+    const flat = matrix.flat();
+    const maxVal = Math.max(...flat, 1);
+
+    let html = `
+        <div style="font-size:12px;color:#475569;margin-bottom:6px;">
+            <strong>Rows:</strong> Actual, <strong>Columns:</strong> Predicted
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Actual \\ Pred</th>
+                    ${labels.map(lbl => `<th>${lbl}</th>`).join("")}
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    matrix.forEach((row, i) => {
+        html += `<tr><th>${labels[i] || `C${i + 1}`}</th>`;
+        row.forEach(v => {
+            const alpha = 0.12 + (v / maxVal) * 0.78;
+            html += `<td style="background: rgba(37,99,235,${alpha.toFixed(3)}); color: #fff; font-weight: 700; text-align:center;">${v}</td>`;
+        });
+        html += `</tr>`;
+    });
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    return html;
+}
+
+function renderRowsTable(rows) {
+    return `
+        <table>
+            <tbody>
+                ${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}
+            </tbody>
+        </table>
+    `;
 }
 
 function renderSinglePR(data) {
@@ -190,19 +362,16 @@ function renderSinglePR(data) {
         data.predicted_risk === "MEDIUM" ? "risk-medium" :
         "risk-low";
 
-    let html = `
-        <h2>
-            PR #${data.pr_number}
-            <span class="risk-badge ${riskClass}">
-                ${data.predicted_risk} RISK
-            </span>
+    const html = `
+        <h2>${data.repo} - PR #${data.pr_number}
+            <span class="risk-badge ${riskClass}">${data.predicted_risk} RISK</span>
         </h2>
 
         <div class="section">
             <h3>Risk Probabilities</h3>
-            ${Object.entries(data.risk_probabilities).map(
-                ([k, v]) => `<span class="tag">${k}: ${(v * 100).toFixed(1)}%</span>`
-            ).join("")}
+            ${Object.entries(data.risk_probabilities)
+                .map(([k, v]) => `<span class="tag">${k}: ${(v * 100).toFixed(1)}%</span>`)
+                .join("")}
         </div>
 
         <div class="section">
@@ -226,12 +395,11 @@ function renderSinglePR(data) {
             ${renderTable(data.ast_metrics)}
         </div>
     `;
-
     document.getElementById("output").innerHTML = html;
 }
 
 function renderRanking(data) {
-    let rows = data.ranked_pull_requests.map((pr, index) => {
+    const rows = data.ranked_pull_requests.map((pr, index) => {
         const riskClass =
             pr.predicted_risk === "HIGH" ? "risk-high" :
             pr.predicted_risk === "MEDIUM" ? "risk-medium" :
@@ -241,20 +409,15 @@ function renderRanking(data) {
             <tr>
                 <td>${index + 1}</td>
                 <td>#${pr.pr_number}</td>
-                <td>
-                    <span class="risk-badge ${riskClass}">
-                        ${pr.predicted_risk}
-                    </span>
-                </td>
+                <td><span class="risk-badge ${riskClass}">${pr.predicted_risk}</span></td>
                 <td>${(pr.risk_probability * 100).toFixed(1)}%</td>
             </tr>
         `;
     }).join("");
 
     document.getElementById("output").innerHTML = `
-        <h2>Ranked Pull Requests</h2>
+        <h2>${data.repo} - Ranked Pull Requests</h2>
         <p>Total analyzed: ${data.count}</p>
-
         <table>
             <thead>
                 <tr>
@@ -264,36 +427,20 @@ function renderRanking(data) {
                     <th>Confidence</th>
                 </tr>
             </thead>
-            <tbody>
-                ${rows}
-            </tbody>
+            <tbody>${rows}</tbody>
         </table>
     `;
 }
-
 
 function renderTable(obj) {
     return `
         <table>
             <tbody>
-                ${Object.entries(obj).map(
-                    ([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`
-                ).join("")}
+                ${Object.entries(obj).map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}
             </tbody>
         </table>
     `;
 }
-
-
-
-function showLoading() {
-    disableAllButtons();
-    document.getElementById("output").innerHTML =
-        "<p>Processing request…</p>";
-}
-
-
 </script>
-
 </body>
 </html>
